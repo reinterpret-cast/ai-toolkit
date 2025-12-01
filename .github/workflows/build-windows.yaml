@@ -16,6 +16,17 @@ jobs:
 
       - name: Install build tools
         run: pip install build wheel
+        
+      - name: Install PyTorch (CUDA 12.6)
+        run: |
+          pip install --no-cache-dir \
+            torch==2.7.0 \
+            torchvision==0.22.0 \
+            torchaudio==2.7.0 \
+            --index-url https://download.pytorch.org/whl/cu126
+
+      - name: Build wheels for PyTorch packages
+        run: pip wheel torch torchvision torchaudio -w wheels
 
       - name: Build wheels
         run: pip wheel -r requirements.txt -w wheels

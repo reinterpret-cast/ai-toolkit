@@ -1,0 +1,104 @@
+name: Build Windows x64 AI Toolkit Bundle
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout wrapper repo
+        uses: actions/checkout@v4
+
+      # ---- Python setup ----
+      - name: Setup Python 3.10 x64
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          architecture: x64
+
+      # ---- Clone ai-toolkit ----
+      - name: Clone ai-toolkit
+        run: git clone https://github.com/ostris/ai-toolkit.git
+
+      - name: Create virtual environment
+        working-directory: ai-toolkit
+        run: python -m venv venv
+
+      - name: Install PyTorch CUDA 12.6
+        working-directory: ai-toolkit
+        shell: pwsh
+        run: |
+          .\venv\Scripts\python.exe -m pip install --upgrade pip
+          .\venv\Scripts\pip.exe install --no-cache-dir `
+            torch==2.7.0 `
+            torchvision==0.22.0 `
+            torchaudio==2.7.0 `
+            --index-url https://download.pytorch.org/whl/cu126
+
+      - name: Install Python requirements
+        working-directory: ai-toolkit
+        run: .\venv\Scripts\pip.exe install -r requirements.txt
+
+      # ---- Node / UI build ----
+      - name: Setup Node.js 20 x64
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.11.1
+          architecture: x64
+
+      - name: Install UI dependencies
+        working-directory: ai-toolkit/ui
+        run: npm ci
+
+      - name: Build UI
+        working-directory: ai-toolkit/ui
+        run: npm run build
+
+      # ---- Bundle everything ----
+      - name: Prepare bundle
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force bundle\node | Out-Null
+          New-Item -ItemType Directory -Force bundle\ai-toolkit | Out-Null
+
+          # Copy Node runtime
+          Copy-Item (Get-Command node).Source bundle\node\node.exe
+          Copy-Item (Split-Path (Get-Command npm).Source) bundle\node\npm -Recurse
+
+          # Copy ai-toolkit including venv and UI
+          Copy-Item ai-toolkit bundle\ai-toolkit -Recurse
+
+          # Launcher script
+          @'
+@echo off
+set ROOT=%~dp0
+set PATH=%ROOT%node;%ROOT%ai-toolkit\venv\Scripts;%PATH%
+
+cd /d "%ROOT%ai-toolkit"
+
+echo Checking Python:
+python --version
+
+echo Checking CUDA:
+python - <<EOF
+import torch
+print("CUDA available:", torch.cuda.is_available())
+print("CUDA version:", torch.version.cuda)
+EOF
+
+REM start backend / ui as needed
+REM example:
+REM python main.py
+'@ | Set-Content bundle\run.bat -Encoding ASCII
+
+      - name: Zip bundle
+        run: Compress-Archive bundle ai-toolkit-win-x64-cuda126.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-toolkit-windows-x64-cuda126
+          path: ai-toolkit-win-x64-cuda126.zip
+          

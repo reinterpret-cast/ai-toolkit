@@ -70,28 +70,29 @@ jobs:
           # Copy ai-toolkit including venv and UI
           Copy-Item ai-toolkit bundle\ai-toolkit -Recurse
 
-          # Launcher script
-          @'
-@echo off
-set ROOT=%~dp0
-set PATH=%ROOT%node;%ROOT%ai-toolkit\venv\Scripts;%PATH%
-
-cd /d "%ROOT%ai-toolkit"
-
-echo Checking Python:
-python --version
-
-echo Checking CUDA:
-python - <<EOF
-import torch
-print("CUDA available:", torch.cuda.is_available())
-print("CUDA version:", torch.version.cuda)
-EOF
-
-REM start backend / ui as needed
-REM example:
-REM python main.py
-'@ | Set-Content bundle\run.bat -Encoding ASCII
+      - name: Create launcher script
+        shell: pwsh
+        run: |
+          $bat = @(
+            "@echo off",
+            "set ROOT=%~dp0",
+            "set PATH=%ROOT%node;%ROOT%ai-toolkit\venv\Scripts;%PATH%",
+            "",
+            "cd /d ""%ROOT%ai-toolkit""",
+            "",
+            "echo Checking Python:",
+            "python --version",
+            "",
+            "echo Checking CUDA:",
+            "python - <<EOF",
+            "import torch",
+            "print(""CUDA available:"", torch.cuda.is_available())",
+            "print(""CUDA version:"", torch.version.cuda)",
+            "EOF",
+            "",
+            "REM python main.py"
+          )
+          $bat | Set-Content bundle\run.bat -Encoding ASCII
 
       - name: Zip bundle
         run: Compress-Archive bundle ai-toolkit-win-x64-cuda126.zip
